@@ -1,0 +1,131 @@
+# Define file types and directory names to remove
+$unwantedFileTypes = @("*.exe", "*.txt", "*.DS_STORE", "*.gif", "*.IDX", "*.jpg", "*.jpeg", "*.png", "*.smi", "*.nfo", "*.rar", "*.zip")
+$unwantedDirectoryNames = @("Cover", "Sample", "Screens", "Screenshots", "Thanks")
+$unwantedDirectoryNamePrefixes = @("Other", "Torrents")
+$videoFileTypes = @(".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".mpeg", ".mpg", ".m4v")
+
+# Add necessary assembly
+Add-Type -AssemblyName Microsoft.VisualBasic
+
+# Function to get non-system drives
+function Get-NonSystemDrives {
+    $allDrives = Get-PSDrive -PSProvider FileSystem
+    $nonSystemDrives = $allDrives | Where-Object { $_.Name -notin @('C', 'D', 'E', 'F', 'Temp', 'G') }
+
+    if ($nonSystemDrives.Count -eq 0) {
+        Write-Output "Only System drives were found"
+        return @()
+    }
+
+    if ($nonSystemDrives.Count -eq 1) {
+        return $nonSystemDrives.Name
+    }
+
+    Write-Host "Available drives: $($nonSystemDrives.Name -join ', ')"
+    $selectedDrive = Read-Host "Enter the drive letter you'd like to clean"
+    return $selectedDrive
+}
+
+    # Function to remove unwanted files and directories
+function Remove-UnwantedFilesAndDirectories {
+    param (
+        [string]$directoryPath,
+        [array]$unwantedFileTypes,
+        [array]$unwantedDirectoryNames,
+        [array]$unwantedDirectoryNamePrefixes
+    )
+
+    Write-Host -NoNewLine "Looking for unwanted files: "
+
+    foreach ($unwantedFileType in $unwantedFileTypes) {
+        $fileRemovalCount = 0
+        Write-Host -NoNewLine "$unwantedFileType, "
+        Get-ChildItem -Path $directoryPath -Filter $unwantedFileType -Recurse | ForEach-Object {
+            try {
+                [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($_.FullName, 'OnlyErrorDialogs', 'SendToRecycleBin')
+                $fileRemovalCount++
+            } catch {
+            Write-Host "Failed to remove: $($_.Name)" -ForegroundColor Red
+            }
+        }
+        if ($fileRemovalCount -gt 0) {
+            Write-Host
+            Write-Host -ForegroundColor Cyan "Files removed for $($unwantedFileType): $fileRemovalCount"
+            Write-Host -NoNewLine "Looking for unwanted files: "
+        }
+    }
+
+    Write-Host `n
+    Write-Host "Looking for directories to remove"
+    $directoryRemovalCount = 0
+    $allDirectories = Get-ChildItem -Path $directoryPath -Directory -Recurse
+    $filteredDirectories = $allDirectories | Where-Object { $_.Parent -ne $directoryPath }
+
+    foreach ($dir in $filteredDirectories) {
+        $isPrefixMatch = $null -ne $_.Name -and $unwantedDirectoryNamePrefixes -contains ($_.Name.Split()[0])
+        $shouldRemove = ($unwantedDirectoryNames -contains $_.Name) -or $isPrefixMatch
+
+        if ($shouldRemove) {
+            Write-Host -ForegroundColor Cyan "Removing: $($_.Name)"
+            try {
+                [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($_.FullName, 'OnlyErrorDialogs', [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)
+                $directoryRemovalCount++
+                Write-Host -NoNewline -ForegroundColor Green "`rDirectories removed: $directoryRemovalCount`n"
+            } catch {
+                Write-Host "Failed to remove: $($_.Name)" -ForegroundColor Red
+            }
+        }
+    }
+
+    Write-Host -ForegroundColor Green "Total directories removed: $directoryRemovalCount"
+}
+
+$driveLetters = Get-NonSystemDrives
+$directoryPath = "$($driveLetters):\"
+
+if ($directoryPath) {
+    Write-Host "Selected Directory Path: $directoryPath`n" -ForegroundColor Green
+
+    # Invoke the function to remove unwanted files and directories
+    Remove-UnwantedFilesAndDirectories -directoryPath $directoryPath -unwantedFileTypes $unwantedFileTypes -unwantedDirectoryNames $unwantedDirectoryNames -unwantedDirectoryNamePrefixes $unwantedDirectoryNamePrefixes
+
+    # Process video files in subdirectories
+    $allDirectories = Get-ChildItem -Path $directoryPath -Directory -Recurse
+    $filteredDirectories = $allDirectories | Where-Object { $_.Parent -ne $directoryPath }
+
+    foreach ($dir in $filteredDirectories) {
+        $subFolderPath = $_.FullName
+        $videoFiles = Get-ChildItem -Path $subFolderPath -File | Where-Object { $_.Extension -in $videoFileTypes }
+
+        if ($videoFiles.Count -eq 0) {
+            return
+        }
+
+        $maxFile = $videoFiles | Sort-Object -Property Length -Descending | Select-Object -First 1
+        $maxFileSize = $maxFile.Length
+        $maxFileName = $maxFile.Name
+
+        foreach ($file in $videoFiles) {
+            if ($file.Length -lt ($maxFileSize / 2)) {
+                Write-Host "Multiple video files found in '$($subFolderPath)'." -ForegroundColor Yellow
+                Write-Host "Larger file: '$($maxFileName)'"
+                Write-Host "Smaller file: '$($file.Name)'"
+                $response = Read-Host -Prompt "Would you like to remove '$($file.Name)'? (Y/N)"
+                if ($response -eq 'Y') {
+                    try {
+                        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($file.FullName, 'OnlyErrorDialogs', 'SendToRecycleBin')
+                        $fileRemovalCount++
+                        Write-Host -NoNewline -ForegroundColor Green "`rFiles removed: $fileRemovalCount"
+                    } catch {
+                        Write-Host "Failed to remove: $($file.Name)" -ForegroundColor Red
+                    }
+                }
+            }
+        }
+    }
+    Write-Host "Finished cleaning media on the $driveLetters drive. Press any key to exit"
+    [void][System.Console]::ReadKey($true)
+} else {
+    Write-Host "No valid directory path selected" -ForegroundColor Red
+    pause
+}
