@@ -1,0 +1,171 @@
+$runningasAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+# Run if in user context
+if (-NOT $runningasAdmin) {
+
+    Write-Host "Applying improvements for the current user"
+
+    # Install Microsoft Store Apps
+    $appIDs = @(
+        '9MVZQVXJBQ9V', # AV1 Video Extension
+        '9N4WGH0Z6VHQ', # HEVC Video Extensions from Device Manufacturer
+        '9PMMSR1CGPWG', # HEIF Image Extensions
+        '9N4D0MSMP0PT', # VP9 Video Extensions
+        '9PG2DK419DRG'  # Webp Image Extensions
+    )
+    foreach ($appID in $appIDs) {
+        if ( -NOT (winget search $appID --accept-source-agreements)) {
+            try {
+                winget install --id $appID --accept-package-agreements --accept-source-agreements
+            } catch {
+                Write-Error "There was a problem installing App ID: $appID. Error: $_"
+            } 
+        } else { 
+            Write-Host "App ID: $appID is either already installed or not applicable for your computer" 
+        }
+    }
+
+    # Registry changes for current user
+    $registryChanges = @(
+        # Set the Print Screen key to open the Snipping Tool
+        @{
+            Path = "HKCU:\Control Panel\Keyboard"
+            Name = "PrintScreenKeyForSnippingEnabled"
+            Value = "1"
+            Type = "DWord"
+        },
+        # Disables cursor dead zone jumping
+        @{
+            Path = "HKCU:\Control Panel\Cursors"
+            Name = "CursorDeadzoneJumpingSetting"
+            Value = "0"
+            Type = "DWord"
+        },
+        # Disables the Windows 11 new context menu
+        @{
+            Path = "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
+            Name = "(Default)"
+            Value = ""
+            Type = "String"
+        },
+        # Aligns the taskbar to the left
+        @{
+            Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Name = "TaskbarAl"
+            Value = "0"
+            Type = "DWord"
+        },
+        # Disables Cortana in the Start search bar
+        @{
+            Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"
+            Name = "CortanaConsent"
+            Value = "0"
+            Type = "DWord"
+        },
+        # Disables web results in the Start search bar
+        @{
+            Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"
+            Name = "BingSearchEnabled"
+            Value = "0"
+            Type = "DWord"
+        },
+        # Disable Suggest Actions for clipboard
+        @{
+            Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\SmartActionPlatform\SmartClipboard"
+            Name = "Disabled"
+            Value = "1"
+            Type = "DWord"
+        },
+        # Disable Recommended Tips and App Ads on Start Menu
+        @{
+            Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Name = "Start_IrisRecommendations"
+            Value = "0"
+            Type = "DWord"
+        },
+        # Set Explorer to open to "This PC"
+        @{
+            Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Name = "LaunchTo"
+            Value = "1"
+            Type = "DWord"
+        },
+        # Remove "Learn about this picture" Desktop icon
+        @{
+            Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\HideDesktopIcons\NewStartPanel"
+            Name = "{2cc5ca98-6485-489a-920e-b3e88a6ccce3}"
+            Value = "1"
+            Type = "DWord"
+        }
+    )
+
+    foreach ($change in $registryChanges) {
+        try {
+            if ($change.Type -eq "Delete") {
+                Remove-ItemProperty -Path $change.Path -Name $change.Name -ErrorAction SilentlyContinue
+            } elseif (-not (Test-Path -Path $change.Path)) {
+                New-Item -Path $change.Path -Force | Out-Null
+                Set-ItemProperty -Path $change.Path -Name $change.Name -Value $change.Value -Type $change.Type
+            } else {
+                Set-ItemProperty -Path $change.Path -Name $change.Name -Value $change.Value -Type $change.Type
+            }
+        } catch { 
+            $errorMessage = $_.Exception.Message
+            Write-Error -Level Error -Message "Failed while making change to key $($change.Name) at path $($change.path). Error: $errorMessage"  
+        }
+    }
+
+    $ContinueasAdmin = Read-Host "The remaining changes require admin permissions. Would you like to continue? Please answer yes or no."
+    if ($ContinueasAdmin -match "y") {
+        # Relaunch as an admin
+        Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+        exit
+    }
+}
+
+if ($runningasAdmin) {
+    
+    Write-Host "Applying administrative improvements"
+
+    # Registry changes
+    $registryChanges = @(
+        # Disable widgets on the taskbar
+        @{
+            Path = "HKLM:\SOFTWARE\Policies\Microsoft\Dsh"
+            Name = "(Default)"
+            Value = 0
+            Type = "DWord"
+        },
+        # Disable widgets on the taskbar
+        @{
+            Path = "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\NewsAndInterests\AllowNewsAndInterests"
+            Name = "AllowNewsAndInterests"
+            Value = 0
+            Type = "DWord"
+        },
+        # Disable fast startup
+        @{
+            Path = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power"
+            Name = "HiberbootEnabled"
+            Value = 0
+            Type = "DWord"
+        }
+    )
+
+    foreach ($change in $registryChanges) {
+        try {
+            if ($change.Type -eq "Delete") {
+                Remove-ItemProperty -Path $change.Path -Name $change.Name -ErrorAction SilentlyContinue
+                Break
+            } elseif (-not (Test-Path -Path $change.Path)) {
+                New-Item -Path $change.Path -Force | Out-Null
+                Set-ItemProperty -Path $change.Path -Name $change.Name -Value $change.Value -Type $change.Type
+            } else {
+                Set-ItemProperty -Path $change.Path -Name $change.Name -Value $change.Value -Type $change.Type
+            }
+        } catch { 
+            $errorMessage = $_.Exception.Message
+            Write-Error -Level Error -Message "Failed while making change to key $($change.Name) at path $($change.path). Error: $errorMessage"  
+        }
+    }
+}
