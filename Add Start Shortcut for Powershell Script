@@ -1,0 +1,44 @@
+# Define the Start Menu folder for the current user
+$StartMenuFolder = Join-Path -Path $env:APPDATA -ChildPath "Microsoft\Windows\Start Menu\Programs"
+
+# Function to sanitize input and remove surrounding quotes if present
+function cleanpath {
+    param ([string]$Path)
+    return $Path.Trim('"')
+}
+
+# Prompt the user for the PowerShell script path
+$ScriptPath = cleanpath (Read-Host "Enter the filepath to your script")
+if (-not (Test-Path $ScriptPath)) {
+    Write-Host "The script path is invalid. Exiting..." -ForegroundColor Red
+    exit
+}
+
+# Define the name for the shortcut
+$ShortcutName = Read-Host "Enter a name for the shortcut"
+
+# Prompt the user for the icon path
+$IconPath = cleanpath (Read-Host "What should be the icon? (.ico)")
+if (-not (Test-Path $IconPath)) {
+    Write-Host "The icon path is invalid. Exiting..." -ForegroundColor Red
+    exit
+}
+
+# Create the shortcut target and arguments
+$PowerShellExe = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+$Arguments = "-ExecutionPolicy Bypass -File `"$ScriptPath`""
+
+# Generate the shortcut path
+$ShortcutPath = Join-Path -Path $StartMenuFolder -ChildPath "$ShortcutName.lnk"
+
+# Create the shortcut
+$Shell = New-Object -ComObject WScript.Shell
+$Shortcut = $Shell.CreateShortcut($ShortcutPath)
+$Shortcut.TargetPath = $PowerShellExe
+$Shortcut.Arguments = $Arguments
+$Shortcut.IconLocation = $IconPath
+$Shortcut.WorkingDirectory = Split-Path -Path $ScriptPath -Parent
+$Shortcut.Save()
+
+Write-Host "Created successfully! Look for $ShortcutName in the start menu"
+[void][System.Console]::ReadKey($true)
