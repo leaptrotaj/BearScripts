@@ -1,0 +1,32 @@
+param(
+    $searchTerm
+)
+
+if (-not $searchTerm) {
+     $searchTerm = Read-Host "Please enter a search term"
+}
+
+$hives = @(
+    "HKLM:\",
+    "HKCU:\",
+    "HKCR:\",
+    "HKU:\",
+    "HKCC:\"
+)
+
+foreach ($hive in $hives) {
+    try {
+        Get-ChildItem -Path $hive -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            try {
+                $key = $_
+                $key.GetValueNames() | ForEach-Object {
+                    $valueName = $_
+                    $value = $key.GetValue($valueName)
+                    if ($value -is [string] -and $value -match "(?i)\b$searchTerm\b") {
+                        Write-Output "Match found in $($key.PSPath): $valueName = $value"
+                    }
+                }
+            } catch {}
+        }
+    } catch {}
+}
