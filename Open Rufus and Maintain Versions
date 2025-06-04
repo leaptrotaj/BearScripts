@@ -1,0 +1,26 @@
+param (
+    [string]$Path
+)
+
+# Validate the provided path
+if (!(Test-Path $Path)) {
+    Write-Host "The specified path does not exist. Please provide a valid directory."
+    exit
+}
+
+# Retrieve all Rufus executables matching the pattern
+$RufusExecutables = Get-ChildItem -Path $Path -Filter "rufus-*.exe" |
+                    Sort-Object Name -Descending
+
+if ($RufusExecutables.Count -gt 0) {
+    $LatestRufus = $RufusExecutables[0]
+
+    # Delete old versions
+    $RufusExecutables | Where-Object { $_.Name -ne $LatestRufus.Name } | ForEach-Object {Remove-Item $_.FullName -Force }
+
+    # Launch the latest version
+    Write-Host "Launching latest Rufus version: $($LatestRufus.Name)"
+    Start-Process -FilePath $LatestRufus.FullName
+} else {
+    Write-Host "No Rufus executable matching 'rufus-*.exe' was found in the specified path."
+}
