@@ -1,0 +1,15 @@
+$registryEntries = @(
+    @{Path = "HKLM:\SYSTEM\Setup\MoSetup"; Key = "AllowUpgradesWithUnsupportedTPMOrCPU"}, # Allows upgrades on unsupported hardware
+    @{Path = "HKLM:\SYSTEM\Setup\LabConfig"; Key = "BypassTPMCheck"}, # Skips TPM verification
+    @{Path = "HKLM:\SYSTEM\Setup\LabConfig"; Key = "BypassSecureBootCheck"}, # Skips Secure Boot verification
+    @{Path = "HKLM:\SYSTEM\Setup\LabConfig"; Key = "BypassRAMCheck"} # Ignores RAM requirement
+)
+
+foreach ($entry in $registryEntries) {
+    $path = $entry.Path
+    $keyName = $entry.Key
+    
+    if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
+    
+    Set-ItemProperty -Path $path -Name $keyName -Value 1 -Type DWORD
+}
