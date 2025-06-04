@@ -1,0 +1,46 @@
+param(
+    [string]$exePath,
+    [string]$downloadPath
+)
+
+# Validate paths
+if (-not (Test-Path $exePath -PathType Leaf)) {
+    Write-Host "Invalid executable path: $exePath" -ForegroundColor Red
+    exit 1
+}
+
+if (-not (Test-Path $downloadPath -PathType Container)) {
+    Write-Host "Invalid download directory: $downloadPath" -ForegroundColor Red
+    exit 1
+}
+
+# Update yt-dlp
+& $exePath -U | Out-Null
+
+# Ask for and validate a YouTube link
+do {
+    $link = Read-Host "Enter the link to a YouTube video or playlist"
+    if ($link -match "^(https?://)?(www\.)?(youtube\.com|youtu\.be)/") {
+        break
+    } else {
+        Write-Host "Invalid link format. Please enter a valid YouTube URL." -ForegroundColor Red
+    }
+} while ($true)
+
+# Ask if this is a playlist before continuing
+do {
+    Write-Host "Is this a playlist? (Y/N)"
+    $playlistType = [console]::ReadKey($true).KeyChar.ToString().ToUpper()
+
+    if ($playlistType -notmatch "^(Y|N)$") {
+        Write-Host "`nInvalid input. Please type 'Y' for Yes or 'N' for No." -ForegroundColor Yellow
+        $playlistType = $null  # Reset if invalid input
+    }
+} while (-not $playlistType)
+
+# Download with yt-dlp
+if ($playlistType -eq 'Y') {
+    & $exePath --paths $downloadPath -o "%(playlist)s/%(playlist_index)s - %(title)s.%(ext)s" $link --cookies-from-browser FireFox
+} else {
+    & $exePath --paths $downloadPath -o "%(title)s.%(ext)s" $link --cookies-from-browser FireFox
+}
